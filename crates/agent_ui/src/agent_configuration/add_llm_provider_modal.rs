@@ -136,6 +136,8 @@ impl ModelInput {
                 .text(cx)
                 .parse::<u64>()
                 .map_err(|_| SharedString::from("Max Tokens must be a number"))?,
+            supports_parallel_tool_calls: None,
+            supports_prompt_cache: None,
         })
     }
 }
@@ -216,6 +218,8 @@ fn save_provider_to_settings(
                     OpenAiCompatibleSettingsContent {
                         api_url,
                         available_models: models,
+                        supports_parallel_tool_calls: None,
+                        supports_prompt_cache: None,
                     },
                 );
             });

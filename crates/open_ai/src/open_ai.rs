@@ -225,6 +225,26 @@ impl Model {
             Self::O1 | Self::O3 | Self::O3Mini | Self::O4Mini | Model::Custom { .. } => false,
         }
     }
+
+    /// Whether the model supports prompt caching.
+    ///
+    /// If the model does not support the parameter, do not pass it up, or the API will return an error.
+    pub fn supports_prompt_cache(&self) -> bool {
+        match self {
+            Self::ThreePointFiveTurbo
+            | Self::Four
+            | Self::FourTurbo
+            | Self::FourOmni
+            | Self::FourOmniMini
+            | Self::FourPointOne
+            | Self::FourPointOneMini
+            | Self::FourPointOneNano
+            | Self::Five
+            | Self::FiveMini
+            | Self::FiveNano => true,
+            Self::O1 | Self::O3 | Self::O3Mini | Self::O4Mini | Model::Custom { .. } => false,
+        }
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize)]

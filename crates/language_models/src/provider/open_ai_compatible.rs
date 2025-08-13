@@ -29,6 +29,8 @@ use crate::provider::open_ai::{OpenAiEventMapper, into_open_ai};
 pub struct OpenAiCompatibleSettings {
     pub api_url: String,
     pub available_models: Vec<AvailableModel>,
+    pub supports_parallel_tool_calls: Option<bool>,
+    pub supports_prompt_cache: Option<bool>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
@@ -38,6 +40,8 @@ pub struct AvailableModel {
     pub max_tokens: u64,
     pub max_output_tokens: Option<u64>,
     pub max_completion_tokens: Option<u64>,
+    pub supports_parallel_tool_calls: Option<bool>,
+    pub supports_prompt_cache: Option<bool>,
 }
 
 pub struct OpenAiCompatibleLanguageModelProvider {
@@ -270,6 +274,34 @@ impl OpenAiCompatibleLanguageModel {
     }
 }
 
+impl OpenAiCompatibleLanguageModel {
+    fn supports_parallel_tool_calls(&self, cx: &AsyncApp) -> bool {
+        // Check model-specific setting first, then provider setting, then default to true
+        self.model
+            .supports_parallel_tool_calls
+            .or_else(|| {
+                cx.read_entity(&self.state, |state, _| {
+                    state.settings.supports_parallel_tool_calls
+                })
+                .ok()
+                .flatten()
+            })
+            .unwrap_or(true)
+    }
+
+    fn supports_prompt_cache(&self, cx: &AsyncApp) -> bool {
+        // Check model-specific setting first, then provider setting, then default to true
+        self.model
+            .supports_prompt_cache
+            .or_else(|| {
+                cx.read_entity(&self.state, |state, _| state.settings.supports_prompt_cache)
+                    .ok()
+                    .flatten()
+            })
+            .unwrap_or(true)
+    }
+}
+
 impl LanguageModel for OpenAiCompatibleLanguageModel {
     fn id(&self) -> LanguageModelId {
         self.id.clone()
@@ -279,8 +311,9 @@ impl LanguageModel for OpenAiCompatibleLanguageModel {
         LanguageModelName::from(
             self.model
                 .display_name
-                .clone()
-                .unwrap_or_else(|| self.model.name.clone()),
+                .as_ref()
+                .unwrap_or(&self.model.name)
+                .clone(),
         )
     }
 
@@ -355,7 +388,15 @@ impl LanguageModel for OpenAiCompatibleLanguageModel {
             LanguageModelCompletionError,
         >,
     > {
-        let request = into_open_ai(request, &self.model.name, true, self.max_output_tokens());
+        let supports_parallel_tool_calls = self.supports_parallel_tool_calls(cx);
+        let supports_prompt_cache = self.supports_prompt_cache(cx);
+        let request = into_open_ai(
+            request,
+            &self.model.name,
+            supports_parallel_tool_calls,
+            supports_prompt_cache,
+            self.max_output_tokens(),
+        );
         let completions = self.stream_completion(request, cx);
         async move {
             let mapper = OpenAiEventMapper::new();
@@ -518,5 +559,84 @@ impl Render for ConfigurationView {
         } else {
             v_flex().size_full().child(api_key_section).into_any()
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::request_limiter::RateLimiter;
+    use gpui::TestAppContext;
+    use http_client::HttpClient;
+    use std::sync::Arc;
+
+    fn create_test_model(
+        supports_parallel_tool_calls_provider: Option<bool>,
+        supports_parallel_tool_calls_model: Option<bool>,
+        cx: &mut TestAppContext,
+    ) -> OpenAiCompatibleLanguageModel {
+        let state = cx.new_entity(|_| State {
+            id: LanguageModelProviderId("test".into()),
+            env_var_name: "TEST_API_KEY".to_string(),
+            api_key: Some("test-key".to_string()),
+            api_key_from_env: false,
+            settings: OpenAiCompatibleSettings {
+                api_url: "https://api.test.com/v1".to_string(),
+                available_models: vec![],
+                supports_parallel_tool_calls: supports_parallel_tool_calls_provider,
+                supports_prompt_cache: None,
+            },
+            _subscription: None,
+        });
+
+        OpenAiCompatibleLanguageModel {
+            id: LanguageModelId::from("test-model".to_string()),
+            provider_id: LanguageModelProviderId("test".into()),
+            provider_name: LanguageModelProviderName("Test Provider".into()),
+            model: AvailableModel {
+                name: "test-model".to_string(),
+                display_name: Some("Test Model".to_string()),
+                max_tokens: 4096,
+                max_output_tokens: Some(2048),
+                max_completion_tokens: None,
+                supports_parallel_tool_calls: supports_parallel_tool_calls_model,
+                supports_prompt_cache: None,
+            },
+            state,
+            http_client: Arc::new(http_client::HttpClient::new()),
+            request_limiter: Arc::new(RateLimiter::new(10.0)),
+        }
+    }
+
+    #[gpui::test]
+    fn test_supports_parallel_tool_calls_model_override_true(cx: &mut TestAppContext) {
+        let model = create_test_model(Some(false), Some(true), cx);
+        cx.update(|cx| {
+            assert_eq!(model.supports_parallel_tool_calls(cx), true);
+        });
+    }
+
+    #[gpui::test]
+    fn test_supports_parallel_tool_calls_model_override_false(cx: &mut TestAppContext) {
+        let model = create_test_model(Some(true), Some(false), cx);
+        cx.update(|cx| {
+            assert_eq!(model.supports_parallel_tool_calls(cx), false);
+        });
+    }
+
+    #[gpui::test]
+    fn test_supports_parallel_tool_calls_provider_setting(cx: &mut TestAppContext) {
+        let model = create_test_model(Some(false), None, cx);
+        cx.update(|cx| {
+            assert_eq!(model.supports_parallel_tool_calls(cx), false);
+        });
+    }
+
+    #[gpui::test]
+    fn test_supports_parallel_tool_calls_default_true(cx: &mut TestAppContext) {
+        let model = create_test_model(None, None, cx);
+        cx.update(|cx| {
+            assert_eq!(model.supports_parallel_tool_calls(cx), true);
+        });
     }
 }

@@ -359,6 +359,7 @@ impl LanguageModel for XAiLanguageModel {
             request,
             self.model.id(),
             self.model.supports_parallel_tool_calls(),
+            true, // X AI provider supports prompt cache by default
             self.max_output_tokens(),
         );
         let completions = self.stream_completion(request, cx);

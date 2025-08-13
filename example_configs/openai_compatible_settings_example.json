@@ -1,0 +1,36 @@
+{
+  "language_models": {
+    "openai_compatible": {
+      "my_custom_provider": {
+        "api_url": "https://my-custom-openai-api.com/v1",
+        "supports_parallel_tool_calls": false,
+        "available_models": [
+          {
+            "name": "my-custom-model-v1",
+            "display_name": "My Custom Model v1",
+            "max_tokens": 4096,
+            "max_output_tokens": 2048
+          },
+          {
+            "name": "my-custom-model-v2",
+            "display_name": "My Custom Model v2 (with parallel tools)",
+            "max_tokens": 8192,
+            "max_output_tokens": 4096,
+            "supports_parallel_tool_calls": true
+          }
+        ]
+      },
+      "another_provider": {
+        "api_url": "https://another-provider.com/api/v1",
+        "available_models": [
+          {
+            "name": "basic-model",
+            "display_name": "Basic Model",
+            "max_tokens": 2048,
+            "supports_parallel_tool_calls": false
+          }
+        ]
+      }
+    }
+  }
+}

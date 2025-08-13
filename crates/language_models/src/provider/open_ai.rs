@@ -36,6 +36,7 @@ const PROVIDER_NAME: LanguageModelProviderName = language_model::OPEN_AI_PROVIDE
 pub struct OpenAiSettings {
     pub api_url: String,
     pub available_models: Vec<AvailableModel>,
+    pub supports_prompt_cache: Option<bool>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
@@ -45,6 +46,7 @@ pub struct AvailableModel {
     pub max_tokens: u64,
     pub max_output_tokens: Option<u64>,
     pub max_completion_tokens: Option<u64>,
+    pub supports_prompt_cache: Option<bool>,
 }
 
 pub struct OpenAiLanguageModelProvider {
@@ -250,6 +252,18 @@ pub struct OpenAiLanguageModel {
 }
 
 impl OpenAiLanguageModel {
+    fn supports_prompt_cache(&self, cx: &AsyncApp) -> bool {
+        // Check provider setting first, then model's built-in capability, then default to true
+        cx.read_entity(&self.state, |state, cx| {
+            AllLanguageModelSettings::get_global(cx)
+                .openai
+                .supports_prompt_cache
+        })
+        .ok()
+        .flatten()
+        .unwrap_or_else(|| self.model.supports_prompt_cache())
+    }
+
     fn stream_completion(
         &self,
         request: open_ai::Request,
@@ -364,10 +378,12 @@ impl LanguageModel for OpenAiLanguageModel {
             LanguageModelCompletionError,
         >,
     > {
+        let supports_prompt_cache = self.supports_prompt_cache(cx);
         let request = into_open_ai(
             request,
             self.model.id(),
             self.model.supports_parallel_tool_calls(),
+            supports_prompt_cache,
             self.max_output_tokens(),
         );
         let completions = self.stream_completion(request, cx);
@@ -383,6 +399,7 @@ pub fn into_open_ai(
     request: LanguageModelRequest,
     model_id: &str,
     supports_parallel_tool_calls: bool,
+    supports_prompt_cache: bool,
     max_output_tokens: Option<u64>,
 ) -> open_ai::Request {
     let stream = !model_id.starts_with("o1-");
@@ -473,7 +490,11 @@ pub fn into_open_ai(
         } else {
             None
         },
-        prompt_cache_key: request.thread_id,
+        prompt_cache_key: if supports_prompt_cache {
+            request.thread_id
+        } else {
+            None
+        },
         tools: request
             .tools
             .into_iter()

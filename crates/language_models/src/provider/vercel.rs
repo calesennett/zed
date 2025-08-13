@@ -355,6 +355,7 @@ impl LanguageModel for VercelLanguageModel {
             request,
             self.model.id(),
             self.model.supports_parallel_tool_calls(),
+            true, // Vercel provider supports prompt cache by default
             self.max_output_tokens(),
         );
         let completions = self.stream_completion(request, cx);

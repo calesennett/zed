@@ -107,12 +107,15 @@ pub struct MistralSettingsContent {
 pub struct OpenAiSettingsContent {
     pub api_url: Option<String>,
     pub available_models: Option<Vec<provider::open_ai::AvailableModel>>,
+    pub supports_prompt_cache: Option<bool>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, JsonSchema)]
 pub struct OpenAiCompatibleSettingsContent {
     pub api_url: String,
     pub available_models: Vec<provider::open_ai_compatible::AvailableModel>,
+    pub supports_parallel_tool_calls: Option<bool>,
+    pub supports_prompt_cache: Option<bool>,
 }
 
 #[derive(Default, Clone, Debug, Serialize, Deserialize, PartialEq, JsonSchema)]
@@ -237,6 +240,11 @@ impl settings::Settings for AllLanguageModelSettings {
                 &mut settings.openai.available_models,
                 openai.as_ref().and_then(|s| s.available_models.clone()),
             );
+            if let Some(supports_prompt_cache) =
+                openai.as_ref().and_then(|s| s.supports_prompt_cache)
+            {
+                settings.openai.supports_prompt_cache = Some(supports_prompt_cache);
+            }
 
             // OpenAI Compatible
             if let Some(openai_compatible) = value.openai_compatible.clone() {
@@ -246,6 +254,9 @@ impl settings::Settings for AllLanguageModelSettings {
                         OpenAiCompatibleSettings {
                             api_url: openai_compatible_settings.api_url,
                             available_models: openai_compatible_settings.available_models,
+                            supports_parallel_tool_calls: openai_compatible_settings
+                                .supports_parallel_tool_calls,
+                            supports_prompt_cache: openai_compatible_settings.supports_prompt_cache,
                         },
                     );
                 }

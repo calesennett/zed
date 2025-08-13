@@ -941,6 +941,7 @@ impl LanguageModel for CloudLanguageModel {
                     request,
                     model.id(),
                     model.supports_parallel_tool_calls(),
+                    true, // Cloud provider supports prompt cache by default
                     None,
                 );
                 let llm_api_token = self.llm_api_token.clone();
